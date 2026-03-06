@@ -1,0 +1,195 @@
+/* 1) Tailwind v4 */
+@import "tailwindcss" source(none);
+@source "../**/*.{js,ts,jsx,tsx}";
+
+/* 2) Animations */
+@import "tw-animate-css";
+
+/* 3) Pizza theme (tomato + cheese + basil) */
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --font-size: 16px;
+
+  /* Base */
+  --background: #fff7ed; /* warm, like dough */
+  --foreground: oklch(0.145 0 0);
+
+  --card: #ffffff;
+  --card-foreground: oklch(0.145 0 0);
+
+  /* Pizza palette */
+  --primary: #cf1b1b; /* tomato */
+  --primary-foreground: #ffffff;
+
+  --secondary: #ffd56a; /* cheese */
+  --secondary-foreground: #1a120b;
+
+  --accent: #2f8f4e; /* basil */
+  --accent-foreground: #ffffff;
+
+  --muted: #fff1d6;
+  --muted-foreground: #6b5b4d;
+
+  --destructive: #b00020;
+  --destructive-foreground: #ffffff;
+
+  --border: rgba(0, 0, 0, 0.12);
+  --input: transparent;
+  --input-background: #fff1d6;
+
+  --switch-background: #e7d9c3;
+
+  --font-weight-medium: 600;
+  --font-weight-normal: 400;
+
+  --ring: rgba(207, 27, 27, 0.35);
+
+  --radius: 1rem;
+}
+
+/* Optional dark mode */
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+
+  --primary: #ff4d4d;
+  --primary-foreground: #1b0b0b;
+
+  --secondary: #ffd56a;
+  --secondary-foreground: #1b0b0b;
+
+  --accent: #46c06a;
+  --accent-foreground: #071a0c;
+
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+
+  --border: oklch(0.269 0 0);
+  --input-background: oklch(0.269 0 0);
+  --ring: rgba(255, 77, 77, 0.35);
+}
+
+/* Map vars to Tailwind tokens */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-background: var(--input-background);
+
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 6px);
+  --radius-md: calc(var(--radius) - 3px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 6px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  html {
+    font-size: var(--font-size);
+  }
+
+  h1 {
+    font-size: var(--text-3xl);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.2;
+  }
+
+  h2 {
+    font-size: var(--text-2xl);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.3;
+  }
+
+  h3 {
+    font-size: var(--text-lg);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.4;
+  }
+
+  label,
+  button {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  input {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-normal);
+    line-height: 1.5;
+  }
+}
+
+/* Font stack */
+:root {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial,
+    "Apple Color Emoji", "Segoe UI Emoji";
+}
+body {
+  font-family: var(--font-sans);
+}
+
+/* Tiny design helpers */
+@layer utilities {
+  .pizza-hero {
+    background:
+      radial-gradient(900px 420px at 20% 10%, rgba(255, 213, 106, 0.55), transparent 60%),
+      radial-gradient(800px 420px at 80% 0%, rgba(207, 27, 27, 0.35), transparent 60%),
+      radial-gradient(700px 420px at 70% 100%, rgba(47, 143, 78, 0.22), transparent 55%);
+  }
+
+  .shine {
+    position: relative;
+    overflow: hidden;
+  }
+  .shine::after {
+    content: "";
+    position: absolute;
+    inset: -40%;
+    transform: rotate(12deg);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.45),
+      transparent
+    );
+    opacity: 0;
+    transition: opacity 200ms ease;
+  }
+  .shine:hover::after {
+    opacity: 1;
+  }
+}

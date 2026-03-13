@@ -46,7 +46,6 @@ Start-Process powershell -ArgumentList '-NoExit','-Command','cd .; npm run dev'
 - Frontend: http://localhost:5173
 - Backend Swagger: http://127.0.0.1:8000/docs
 - Health: http://127.0.0.1:8000/api/v1/health
-- Admin panel: http://localhost:5173/admin
 
 ## Admin login
 - Login: `pavelkimov@gmail.com`
@@ -58,8 +57,4 @@ Use `/api/v1/auth/login` with body:
   "password": "123456"
 }
 ```
-
-## Demo users (created by seed)
-- `peter@mail.ru` / `123456`
-- `vasya@mail.ru` / `123456`
 

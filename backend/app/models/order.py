@@ -23,6 +23,7 @@ class Order(Base):
     payment_method: Mapped[str] = mapped_column(String(20), nullable=False)
     subtotal: Mapped[int] = mapped_column(Integer, nullable=False)
     discount: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    bonus_spent: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     delivery_price: Mapped[int] = mapped_column(Integer, nullable=False)
     total: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(

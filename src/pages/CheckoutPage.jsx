@@ -21,6 +21,8 @@ export default function CheckoutPage() {
   });
 
   const [savedAddresses, setSavedAddresses] = useState([]);
+  const [bonuses, setBonuses] = useState({ balance: 0, accrued: 0, spent: 0 });
+  const [bonusInput, setBonusInput] = useState("0");
   const [selectedAddressId, setSelectedAddressId] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
@@ -34,15 +36,18 @@ export default function CheckoutPage() {
   useEffect(() => {
     if (!isAuthed) {
       setSavedAddresses([]);
+      setBonuses({ balance: 0, accrued: 0, spent: 0 });
+      setBonusInput("0");
       setSelectedAddressId("");
       return;
     }
 
     let mounted = true;
-    UsersAPI.addresses()
-      .then((list) => {
+    Promise.all([UsersAPI.addresses(), UsersAPI.bonuses()])
+      .then(([list, bonusStats]) => {
         if (!mounted) return;
         setSavedAddresses(list);
+        setBonuses(bonusStats);
         const def = list.find((a) => a.is_default) || list[0];
         if (def) {
           setSelectedAddressId(String(def.id));
@@ -52,10 +57,12 @@ export default function CheckoutPage() {
             comment: p.comment || def.comment || ""
           }));
         }
+        setBonusInput("0");
       })
       .catch(() => {
         if (!mounted) return;
         setSavedAddresses([]);
+        setBonuses({ balance: 0, accrued: 0, spent: 0 });
       });
 
     return () => {
@@ -70,6 +77,19 @@ export default function CheckoutPage() {
     if (form.address.trim().length < 6) return false;
     return true;
   }, [form, state.items.length]);
+
+  const maxBonusSpend = useMemo(() => {
+    if (!isAuthed) return 0;
+    return Math.max(0, Math.min(bonuses.balance || 0, state.total || 0));
+  }, [bonuses.balance, isAuthed, state.total]);
+
+  const bonusSpent = useMemo(() => {
+    const parsed = Number.parseInt(bonusInput, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+    return Math.min(parsed, maxBonusSpend);
+  }, [bonusInput, maxBonusSpend]);
+
+  const finalTotal = useMemo(() => Math.max(0, state.total - bonusSpent), [bonusSpent, state.total]);
 
   function update(key, value) {
     setForm((p) => ({ ...p, [key]: value }));
@@ -87,6 +107,7 @@ export default function CheckoutPage() {
         customer: { name: form.name.trim(), phone: form.phone.trim() },
         delivery: { address: form.address.trim(), comment: form.comment.trim() || null },
         payment_method: form.payment,
+        bonus_spent: bonusSpent,
         items: state.items.map((it) => ({
           pizza_id: it.pizzaId,
           size_id: it.meta?.sizeId || "m",
@@ -210,6 +231,39 @@ export default function CheckoutPage() {
               </div>
             </div>
 
+            {isAuthed ? (
+              <div className="space-y-2 rounded-xl border bg-background p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold">Списать бонусы</div>
+                    <div className="text-xs text-muted-foreground">
+                      Доступно: {bonuses.balance}. Можно списать до {formatRUB(maxBonusSpend)}.
+                    </div>
+                  </div>
+                  {maxBonusSpend > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setBonusInput(String(maxBonusSpend))}
+                      className="rounded-lg border bg-background px-3 py-1.5 text-xs hover:bg-accent"
+                    >
+                      Списать максимум
+                    </button>
+                  ) : null}
+                </div>
+
+                <input
+                  type="number"
+                  min="0"
+                  max={String(maxBonusSpend)}
+                  step="1"
+                  value={bonusInput}
+                  onChange={(e) => setBonusInput(e.target.value)}
+                  className="w-full rounded-xl border bg-input-background px-3 py-2"
+                  placeholder="0"
+                />
+              </div>
+            ) : null}
+
             <button
               disabled={!canSubmit || loading}
               className="w-full rounded-xl bg-primary px-4 py-2 text-sm text-primary-foreground hover:opacity-90 disabled:opacity-50"
@@ -255,9 +309,16 @@ export default function CheckoutPage() {
               <span>{state.delivery === 0 ? "Бесплатно" : formatRUB(state.delivery)}</span>
             </div>
 
+            {bonusSpent > 0 && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Бонусы</span>
+                <span className="text-primary">- {formatRUB(bonusSpent)}</span>
+              </div>
+            )}
+
             <div className="flex justify-between text-base font-semibold">
               <span>Итого</span>
-              <span>{formatRUB(state.total)}</span>
+              <span>{formatRUB(finalTotal)}</span>
             </div>
 
             <div className="text-xs text-muted-foreground">Бесплатная доставка от {formatRUB(constants.FREE_DELIVERY_FROM)}.</div>

@@ -1,11 +1,10 @@
 ﻿import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import desc, func, select
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
-from app.models.order import Order
 from app.models.user import User, UserAddress
 from app.schemas.user import (
     BonusOut,
@@ -15,6 +14,7 @@ from app.schemas.user import (
     UserOut,
     UserUpdateIn,
 )
+from app.services.bonuses import calc_bonus_stats
 
 router = APIRouter(tags=["users"])
 
@@ -186,16 +186,5 @@ async def my_bonuses(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> BonusOut:
-    done_total = (
-        await db.execute(
-            select(func.coalesce(func.sum(Order.total), 0)).where(
-                Order.user_id == user.id,
-                Order.status == "done",
-            )
-        )
-    ).scalar_one()
-
-    accrued = int(done_total * 0.05)
-    spent = 0
-    balance = accrued - spent
+    balance, accrued, spent = await calc_bonus_stats(db, user.id)
     return BonusOut(balance=balance, accrued=accrued, spent=spent)

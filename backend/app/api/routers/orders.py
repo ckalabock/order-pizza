@@ -10,6 +10,7 @@ from app.models.catalog import Pizza, Topping
 from app.models.order import Order, OrderItem, OrderItemTopping
 from app.models.user import User
 from app.schemas.order import CreateOrderIn, OrderItemOut, OrderListItemOut, OrderOut
+from app.services.bonuses import calc_bonus_stats
 from app.services.pricing import (
     calc_delivery,
     calc_discount_for_item,
@@ -48,6 +49,7 @@ def serialize_order(order: Order, topping_map: dict[str, str]) -> OrderOut:
         status=order.status,
         subtotal=order.subtotal,
         discount=order.discount,
+        bonus_spent=order.bonus_spent,
         delivery_price=order.delivery_price,
         total=order.total,
         created_at=order.created_at.isoformat(),
@@ -100,7 +102,23 @@ async def create_order(
 
     subtotal = max(0, subtotal_before_discount - discount)
     delivery_price = calc_delivery(subtotal, has_items=len(items_models) > 0)
-    total = subtotal + delivery_price
+    total_before_bonuses = subtotal + delivery_price
+
+    requested_bonus_spent = data.bonus_spent
+    if requested_bonus_spent and not user:
+        raise HTTPException(status_code=401, detail="Bonuses are available only for authorized users")
+
+    available_bonus_balance = 0
+    if user:
+        available_bonus_balance, _, _ = await calc_bonus_stats(db, user.id)
+
+    if requested_bonus_spent > available_bonus_balance:
+        raise HTTPException(status_code=400, detail="Not enough bonus balance")
+
+    if requested_bonus_spent > total_before_bonuses:
+        raise HTTPException(status_code=400, detail="Bonus spend exceeds order total")
+
+    total = total_before_bonuses - requested_bonus_spent
 
     order = Order(
         user_id=user.id if user else None,
@@ -113,6 +131,7 @@ async def create_order(
         payment_method=data.payment_method,
         subtotal=subtotal,
         discount=discount,
+        bonus_spent=requested_bonus_spent,
         delivery_price=delivery_price,
         total=total,
     )

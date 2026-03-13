@@ -264,6 +264,7 @@ export default function AccountPage() {
                   <div>Подытог: {formatRUB(selectedOrder.subtotal)}</div>
                   <div>Скидка: {selectedOrder.discount ? `- ${formatRUB(selectedOrder.discount)}` : "нет"}</div>
                   <div>Доставка: {selectedOrder.delivery_price === 0 ? "Бесплатно" : formatRUB(selectedOrder.delivery_price)}</div>
+                  <div>Бонусы: {selectedOrder.bonus_spent ? `- ${formatRUB(selectedOrder.bonus_spent)}` : "нет"}</div>
                   <div className="font-semibold text-foreground">Итого: {formatRUB(selectedOrder.total)}</div>
                 </div>
               </div>

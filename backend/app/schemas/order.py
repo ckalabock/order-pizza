@@ -24,6 +24,7 @@ class CreateOrderIn(BaseModel):
     customer: CustomerIn
     delivery: DeliveryIn
     payment_method: str = Field(pattern="^(card|cash)$")
+    bonus_spent: int = Field(default=0, ge=0)
     items: list[OrderItemIn] = Field(min_length=1)
 
 
@@ -42,6 +43,7 @@ class OrderOut(BaseModel):
     status: str
     subtotal: int
     discount: int
+    bonus_spent: int
     delivery_price: int
     total: int
     created_at: str

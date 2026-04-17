@@ -30,7 +30,6 @@ export default function HomePage() {
   }
 
   function addCombo() {
-    // Комбо: Пепперони + доп. сыр (скидка применится на уровне cartContext по правилу)
     const pizza = PIZZAS.find((p) => p.id === "pepperoni");
     if (!pizza) return;
 
@@ -41,7 +40,7 @@ export default function HomePage() {
       title: pizza.name,
       size: "30 см",
       toppings: ["Доп. сыр"],
-      unitPrice: Math.round(pizza.basePrice * 1.25) + 80, // сыр +80 (см toppings.js)
+      unitPrice: Math.round(pizza.basePrice * 1.25) + 80,
       qty: 1,
       meta: { sizeId: "m", toppingIds: ["extra_cheese"] }
     });
@@ -53,7 +52,8 @@ export default function HomePage() {
       <section className="pizza-hero overflow-hidden rounded-2xl border bg-card p-6 shadow-sm">
         <h1 className="text-3xl font-semibold">Вкуснейшая пицца с доставкой на дом</h1>
         <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
-          Свежие ингредиенты, авторские рецепты и быстрая доставка. Попробуйте лучшую пиццу в городе уже сегодня!
+          Свежие ингредиенты, авторские рецепты и быстрая доставка. Попробуйте лучшую
+          пиццу в городе уже сегодня.
         </p>
 
         <div className="mt-5 flex flex-col gap-2 sm:flex-row">
@@ -75,19 +75,19 @@ export default function HomePage() {
           <div className="rounded-2xl border bg-background p-4">
             <div className="text-sm font-semibold">Быстрая доставка</div>
             <div className="mt-1 text-sm text-muted-foreground">
-              Доставим вашу пиццу горячей в течение 30 минут или бесплатно
+              Доставим вашу пиццу горячей в течение 30 минут или бесплатно.
             </div>
           </div>
           <div className="rounded-2xl border bg-background p-4">
             <div className="text-sm font-semibold">Свежие продукты</div>
             <div className="mt-1 text-sm text-muted-foreground">
-              Используем только свежие ингредиенты высшего качества
+              Используем только свежие ингредиенты высокого качества.
             </div>
           </div>
           <div className="rounded-2xl border bg-background p-4">
             <div className="text-sm font-semibold">Бесплатная доставка</div>
             <div className="mt-1 text-sm text-muted-foreground">
-              При заказе от 1000 рублей доставка по городу бесплатно
+              При заказе от 1000 рублей доставка по городу бесплатна.
             </div>
           </div>
         </div>
@@ -102,16 +102,22 @@ export default function HomePage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-3">
-          {popular.map((p) => (
-            <div key={p.id} className="rounded-2xl border bg-card p-4 shadow-sm">
-              <div className="text-base font-semibold">{p.name}</div>
-              <div className="mt-1 text-sm text-muted-foreground">{p.description}</div>
-              <div className="mt-3 text-sm text-muted-foreground">
-                от <span className="text-foreground font-semibold">{formatRUB(p.basePrice)}</span>
+          {popular.map((pizza) => (
+            <div
+              key={pizza.id}
+              className="flex h-full flex-col rounded-2xl border bg-card p-4 shadow-sm"
+            >
+              <div className="flex min-h-[160px] flex-col">
+                <div className="text-base font-semibold">{pizza.name}</div>
+                <div className="mt-1 text-sm text-muted-foreground">{pizza.description}</div>
+                <div className="mt-3 text-sm text-muted-foreground">
+                  от <span className="font-semibold text-foreground">{formatRUB(pizza.basePrice)}</span>
+                </div>
               </div>
+
               <button
-                onClick={() => addPopular(p)}
-                className="shine mt-4 w-full rounded-xl bg-primary px-4 py-2 text-sm text-primary-foreground hover:opacity-90"
+                onClick={() => addPopular(pizza)}
+                className="shine mt-auto w-full rounded-xl bg-primary px-4 py-2 text-sm text-primary-foreground hover:opacity-90"
               >
                 Выбрать
               </button>
@@ -125,7 +131,7 @@ export default function HomePage() {
           <div>
             <div className="text-2xl font-semibold">Голодны?</div>
             <div className="mt-1 text-sm text-muted-foreground">
-              Закажите пиццу прямо сейчас и получите скидку 10% на первый заказ!
+              Закажите пиццу прямо сейчас и получите скидку 10% на первый заказ.
             </div>
           </div>
           <Link

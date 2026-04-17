@@ -1,0 +1,216 @@
+{
+  "generated_at": "2026-04-09T09:52:28.405582+00:00",
+  "active_promos_count": 2,
+  "active_promos": [
+    {
+      "code": "WELCOME10",
+      "title": "Приветственная скидка 10%",
+      "description": "Скидка 10% на заказ от 900 рублей",
+      "discount_type": "percent",
+      "discount_value": 10,
+      "min_order_total": 900,
+      "id": "16c934dc-cefa-47dd-a1ba-ac271a3ac9f3"
+    },
+    {
+      "code": "FREEDLV",
+      "title": "Скидка 150 рублей",
+      "description": "Компенсация стоимости доставки для заказа от 1200 рублей",
+      "discount_type": "fixed",
+      "discount_value": 150,
+      "min_order_total": 1200,
+      "id": "1c26b7e2-0a99-4478-9341-3014212e7b31"
+    }
+  ],
+  "bonuses": {
+    "balance": 122,
+    "accrued": 162,
+    "spent": 40
+  },
+  "preview_ok_status": 200,
+  "preview_ok": {
+    "subtotal_before_discount": 1267,
+    "combo_discount": 77,
+    "subtotal": 1071,
+    "discount": 196,
+    "promo_code": "WELCOME10",
+    "promo_discount": 119,
+    "delivery_price": 0,
+    "bonus_spent": 20,
+    "total_before_bonuses": 1071,
+    "total": 1051,
+    "scheduled_for": "2026-04-09T11:52:28.262396+00:00"
+  },
+  "preview_bad_status": 400,
+  "preview_bad": {
+    "detail": "Promo code not found or inactive"
+  },
+  "preview_early_schedule_status": 400,
+  "preview_early_schedule": {
+    "detail": "Scheduled delivery must be at least 30 minutes from now"
+  },
+  "preview_bonus_overflow_status": 400,
+  "preview_bonus_overflow": {
+    "detail": "Not enough bonus balance"
+  },
+  "created_order": {
+    "order_id": "736c51fd-d33a-46fc-997f-b8ae4984275e",
+    "public_token": "9ce0264fb1d5f968712357236364151acdf3315904f40f67d90939113f21f9fa",
+    "status": "created",
+    "subtotal_before_discount": 1267,
+    "combo_discount": 77,
+    "subtotal": 1071,
+    "discount": 196,
+    "promo_code": "WELCOME10",
+    "promo_discount": 119,
+    "bonus_spent": 20,
+    "delivery_price": 0,
+    "total": 1051,
+    "created_at": "2026-04-09T09:52:28.328138+00:00",
+    "scheduled_for": "2026-04-09T11:52:28.262396+00:00",
+    "customer_name": "Peter",
+    "customer_phone": "+79990000001",
+    "delivery_address": "Moscow, Tverskaya 1",
+    "delivery_comment": "Stage 3 test",
+    "payment_method": "card",
+    "items": [
+      {
+        "pizza_id": "pepperoni",
+        "size_id": "m",
+        "qty": 1,
+        "unit_price": 768,
+        "title": "Pepperoni",
+        "toppings": [
+          "Extra cheese"
+        ]
+      },
+      {
+        "pizza_id": "margherita",
+        "size_id": "s",
+        "qty": 1,
+        "unit_price": 499,
+        "title": "Margherita",
+        "toppings": []
+      }
+    ],
+    "review": null
+  },
+  "review_before_done_status": 409,
+  "review_before_done": {
+    "detail": "Review is available only for completed orders"
+  },
+  "status_updated": {
+    "order_id": "736c51fd-d33a-46fc-997f-b8ae4984275e",
+    "status": "done"
+  },
+  "review_saved": {
+    "id": "6735d98d-3708-4606-b30e-e9a658af491d",
+    "rating": 5,
+    "comment": "Отзыв этапа 3: быстро и удобно",
+    "created_at": "2026-04-09T09:52:28.380494+00:00"
+  },
+  "my_order": {
+    "order_id": "736c51fd-d33a-46fc-997f-b8ae4984275e",
+    "public_token": "9ce0264fb1d5f968712357236364151acdf3315904f40f67d90939113f21f9fa",
+    "status": "done",
+    "subtotal_before_discount": 1267,
+    "combo_discount": 77,
+    "subtotal": 1071,
+    "discount": 196,
+    "promo_code": "WELCOME10",
+    "promo_discount": 119,
+    "bonus_spent": 20,
+    "delivery_price": 0,
+    "total": 1051,
+    "created_at": "2026-04-09T09:52:28.328138+00:00",
+    "scheduled_for": "2026-04-09T11:52:28.262396+00:00",
+    "customer_name": "Peter",
+    "customer_phone": "+79990000001",
+    "delivery_address": "Moscow, Tverskaya 1",
+    "delivery_comment": "Stage 3 test",
+    "payment_method": "card",
+    "items": [
+      {
+        "pizza_id": "pepperoni",
+        "size_id": "m",
+        "qty": 1,
+        "unit_price": 768,
+        "title": "Pepperoni",
+        "toppings": [
+          "Extra cheese"
+        ]
+      },
+      {
+        "pizza_id": "margherita",
+        "size_id": "s",
+        "qty": 1,
+        "unit_price": 499,
+        "title": "Margherita",
+        "toppings": []
+      }
+    ],
+    "review": {
+      "id": "6735d98d-3708-4606-b30e-e9a658af491d",
+      "rating": 5,
+      "comment": "Отзыв этапа 3: быстро и удобно",
+      "created_at": "2026-04-09T09:52:28.380494+00:00"
+    }
+  },
+  "admin_reviews_count": 3,
+  "admin_reviews_last": {
+    "id": "6735d98d-3708-4606-b30e-e9a658af491d",
+    "rating": 5,
+    "comment": "Отзыв этапа 3: быстро и удобно",
+    "created_at": "2026-04-09T09:52:28.380494+00:00",
+    "order_id": "736c51fd-d33a-46fc-997f-b8ae4984275e",
+    "user_id": "55c2f01b-fafe-4acf-8f09-e8f2639ac3ee",
+    "user_name": "Peter",
+    "user_email": "peter@mail.ru"
+  },
+  "public_order": {
+    "order_id": "736c51fd-d33a-46fc-997f-b8ae4984275e",
+    "public_token": "9ce0264fb1d5f968712357236364151acdf3315904f40f67d90939113f21f9fa",
+    "status": "done",
+    "subtotal_before_discount": 1267,
+    "combo_discount": 77,
+    "subtotal": 1071,
+    "discount": 196,
+    "promo_code": "WELCOME10",
+    "promo_discount": 119,
+    "bonus_spent": 20,
+    "delivery_price": 0,
+    "total": 1051,
+    "created_at": "2026-04-09T09:52:28.328138+00:00",
+    "scheduled_for": "2026-04-09T11:52:28.262396+00:00",
+    "customer_name": "Peter",
+    "customer_phone": "+79990000001",
+    "delivery_address": "Moscow, Tverskaya 1",
+    "delivery_comment": "Stage 3 test",
+    "payment_method": "card",
+    "items": [
+      {
+        "pizza_id": "pepperoni",
+        "size_id": "m",
+        "qty": 1,
+        "unit_price": 768,
+        "title": "Pepperoni",
+        "toppings": [
+          "Extra cheese"
+        ]
+      },
+      {
+        "pizza_id": "margherita",
+        "size_id": "s",
+        "qty": 1,
+        "unit_price": 499,
+        "title": "Margherita",
+        "toppings": []
+      }
+    ],
+    "review": {
+      "id": "6735d98d-3708-4606-b30e-e9a658af491d",
+      "rating": 5,
+      "comment": "Отзыв этапа 3: быстро и удобно",
+      "created_at": "2026-04-09T09:52:28.380494+00:00"
+    }
+  }
+}

@@ -5,6 +5,7 @@ from app.core.config import settings
 from app.api.routers.health import router as health_router
 from app.api.routers.catalog import router as catalog_router
 from app.api.routers.auth import router as auth_router
+from app.api.routers.promos import router as promos_router
 from app.api.routers.users import router as users_router
 from app.api.routers.orders import router as orders_router
 from app.api.routers.admin import router as admin_router
@@ -27,6 +28,7 @@ API_PREFIX = "/api/v1"
 
 app.include_router(health_router, prefix=API_PREFIX)
 app.include_router(catalog_router, prefix=API_PREFIX)
+app.include_router(promos_router, prefix=API_PREFIX)
 app.include_router(auth_router, prefix=API_PREFIX)
 app.include_router(users_router, prefix=API_PREFIX)
 app.include_router(orders_router, prefix=API_PREFIX)

@@ -11,6 +11,9 @@ export const AdminAPI = {
       body: { status }
     });
   },
+  listReviews() {
+    return apiFetch("/admin/reviews", { auth: true });
+  },
 
   listPizzas() {
     return apiFetch("/admin/pizzas", { auth: true });
@@ -46,5 +49,18 @@ export const AdminAPI = {
   },
   updateSize(id, payload) {
     return apiFetch(`/admin/sizes/${id}`, { method: "PATCH", auth: true, body: payload });
+  },
+
+  listPromoCodes() {
+    return apiFetch("/admin/promocodes", { auth: true });
+  },
+  createPromoCode(payload) {
+    return apiFetch("/admin/promocodes", { method: "POST", auth: true, body: payload });
+  },
+  updatePromoCode(id, payload) {
+    return apiFetch(`/admin/promocodes/${id}`, { method: "PATCH", auth: true, body: payload });
+  },
+  deletePromoCode(id) {
+    return apiFetch(`/admin/promocodes/${id}`, { method: "DELETE", auth: true });
   }
 };

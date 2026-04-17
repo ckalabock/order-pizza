@@ -1,0 +1,60 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+skinparam usecase {
+  BackgroundColor #F7F3E8
+  BorderColor #9A7B4F
+  ArrowColor #6C5B3B
+}
+skinparam actorStyle awesome
+
+actor "Гость" as Guest
+actor "Клиент" as Client
+actor "Администратор" as Admin
+
+rectangle "ИС «Заказ пиццы» — этап 3" {
+  usecase "Просматривать каталог" as UC_Browse
+  usecase "Оформлять заказ" as UC_Order
+  usecase "Применять\nпромокод" as UC_Promo
+  usecase "Запланировать\nдоставку" as UC_Schedule
+  usecase "Проверять\nпредварительный расчет" as UC_Preview
+  usecase "Использовать бонусы" as UC_Bonus
+  usecase "Отслеживать заказ\nпо токену" as UC_Track
+  usecase "Просматривать\nисторию заказов" as UC_History
+  usecase "Оставлять отзыв\nпо завершенному заказу" as UC_Review
+  usecase "Управлять\nадресами" as UC_Address
+
+  usecase "Управлять статусами\nзаказов" as UC_OrderAdmin
+  usecase "Управлять каталогом" as UC_CatalogAdmin
+  usecase "Управлять\nпромокодами" as UC_PromoAdmin
+  usecase "Просматривать\nотзывы клиентов" as UC_ReviewAdmin
+}
+
+Guest --> UC_Browse
+Guest --> UC_Order
+Guest --> UC_Preview
+Guest --> UC_Track
+
+Client --> UC_Browse
+Client --> UC_Order
+Client --> UC_Preview
+Client --> UC_Bonus
+Client --> UC_History
+Client --> UC_Review
+Client --> UC_Address
+Client --> UC_Track
+
+Admin --> UC_OrderAdmin
+Admin --> UC_CatalogAdmin
+Admin --> UC_PromoAdmin
+Admin --> UC_ReviewAdmin
+
+UC_Order .> UC_Promo : <<include>>
+UC_Order .> UC_Schedule : <<include>>
+UC_Order .> UC_Preview : <<include>>
+UC_Order .> UC_Bonus : <<extend>>
+UC_History .> UC_Review : <<extend>>
+UC_PromoAdmin .> UC_Promo : <<support>>
+UC_ReviewAdmin .> UC_Review : <<monitor>>
+
+@enduml

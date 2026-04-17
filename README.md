@@ -47,6 +47,11 @@ Start-Process powershell -ArgumentList '-NoExit','-Command','cd .; npm run dev'
 - Backend Swagger: http://127.0.0.1:8000/docs
 - Health: http://127.0.0.1:8000/api/v1/health
 
+## Stage 3 features
+- Promo codes with server-side validation and admin management
+- Order preview with scheduled delivery support
+- Reviews for completed orders inside the account page
+
 ## Admin login
 - Login: `pavelkimov@gmail.com`
 - Password: `123456`
@@ -57,4 +62,3 @@ Use `/api/v1/auth/login` with body:
   "password": "123456"
 }
 ```
-

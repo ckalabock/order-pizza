@@ -1,10 +1,12 @@
-﻿import secrets
+from collections import Counter
+import secrets
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import hash_password
 from app.models.catalog import Pizza, Size, Topping
 from app.models.order import Order, OrderItem, OrderItemTopping
+from app.models.promo import PromoCode
 from app.models.user import User, UserAddress
 
 FREE_DELIVERY_FROM = 1000
@@ -31,7 +33,7 @@ async def calc_unit_price(
     if not size:
         raise ValueError("Size not found")
 
-    toppings: list[Topping] = []
+    toppings_map: dict[str, Topping] = {}
     if topping_ids:
         toppings = (
             await db.execute(
@@ -40,10 +42,11 @@ async def calc_unit_price(
                 )
             )
         ).scalars().all()
-        if len(toppings) != len(set(topping_ids)):
+        toppings_map = {t.id: t for t in toppings}
+        if len(toppings_map) != len(set(topping_ids)):
             raise ValueError("Topping not found")
 
-    toppings_sum = sum(t.price for t in toppings)
+    toppings_sum = sum(toppings_map[topping_id].price for topping_id in topping_ids)
     unit = int(round(pizza.base_price * size.multiplier + toppings_sum))
     return unit
 
@@ -136,6 +139,27 @@ SEED_USERS = [
     {"email": "vasya@mail.ru", "name": "Vasya", "password": "123456", "role": "user"},
 ]
 
+SEED_PROMOS = [
+    {
+        "code": "WELCOME10",
+        "title": "Приветственная скидка 10%",
+        "description": "Скидка 10% на заказ от 900 рублей",
+        "discount_type": "percent",
+        "discount_value": 10,
+        "min_order_total": 900,
+        "active": True,
+    },
+    {
+        "code": "FREEDLV",
+        "title": "Скидка 150 рублей",
+        "description": "Компенсация стоимости доставки для заказа от 1200 рублей",
+        "discount_type": "fixed",
+        "discount_value": 150,
+        "min_order_total": 1200,
+        "active": True,
+    },
+]
+
 SEED_ORDER_TEMPLATES = [
     {
         "customer_name": "Peter",
@@ -175,6 +199,24 @@ async def seed_catalog(db: AsyncSession) -> None:
     for p in SEED_PIZZAS:
         if not (await db.execute(select(Pizza).where(Pizza.id == p["id"]))).scalar_one_or_none():
             db.add(Pizza(**p))
+
+    await db.commit()
+
+
+async def seed_promos(db: AsyncSession) -> None:
+    for promo in SEED_PROMOS:
+        exists = (
+            await db.execute(select(PromoCode).where(PromoCode.code == promo["code"]))
+        ).scalar_one_or_none()
+        if exists:
+            exists.title = promo["title"]
+            exists.description = promo["description"]
+            exists.discount_type = promo["discount_type"]
+            exists.discount_value = promo["discount_value"]
+            exists.min_order_total = promo["min_order_total"]
+            exists.active = promo["active"]
+            continue
+        db.add(PromoCode(**promo))
 
     await db.commit()
 
@@ -224,8 +266,8 @@ async def create_seed_order_for_user(db: AsyncSession, user: User, template: dic
             unit_price=unit_price,
             title=pizza.name,
         )
-        for tid in item["toppings"]:
-            oi.toppings.append(OrderItemTopping(topping_id=tid))
+        for topping_id, topping_qty in Counter(item["toppings"]).items():
+            oi.toppings.append(OrderItemTopping(topping_id=topping_id, qty=topping_qty))
         order_items.append(oi)
 
     subtotal = max(0, subtotal_before_discount - discount)
@@ -291,6 +333,7 @@ async def seed_demo_users_and_orders(db: AsyncSession) -> None:
 
 async def seed_all(db: AsyncSession) -> None:
     await seed_catalog(db)
+    await seed_promos(db)
     await seed_demo_users_and_orders(db)
 
 

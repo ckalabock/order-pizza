@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { OrdersAPI } from "../api/orders.js";
 import { UsersAPI } from "../api/users.js";
@@ -6,8 +6,9 @@ import { useAuth } from "../context/authContext.jsx";
 import { formatRUB } from "../utils/currency.js";
 
 function formatDate(value) {
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? value : d.toLocaleString("ru-RU");
+  if (!value) return "Не указано";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("ru-RU");
 }
 
 export default function AccountPage() {
@@ -16,15 +17,23 @@ export default function AccountPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [reviewMessage, setReviewMessage] = useState("");
 
   const [orders, setOrders] = useState([]);
   const [addresses, setAddresses] = useState([]);
   const [bonuses, setBonuses] = useState({ balance: 0, accrued: 0, spent: 0 });
   const [selectedOrderId, setSelectedOrderId] = useState("");
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [reviewDraft, setReviewDraft] = useState({ rating: 5, comment: "" });
   const [orderLoading, setOrderLoading] = useState(false);
+  const [reviewSaving, setReviewSaving] = useState(false);
 
-  const [newAddress, setNewAddress] = useState({ label: "Дом", address: "", comment: "", is_default: false });
+  const [newAddress, setNewAddress] = useState({
+    label: "Дом",
+    address: "",
+    comment: "",
+    is_default: false
+  });
 
   const ordersCount = useMemo(() => orders.length, [orders]);
 
@@ -40,12 +49,12 @@ export default function AccountPage() {
       setOrders(myOrders);
       setAddresses(myAddresses);
       setBonuses(myBonuses);
-      if (selectedOrderId && !myOrders.some((o) => String(o.order_id) === String(selectedOrderId))) {
+      if (selectedOrderId && !myOrders.some((order) => String(order.order_id) === String(selectedOrderId))) {
         setSelectedOrderId("");
         setSelectedOrder(null);
       }
-    } catch (e) {
-      setError(e?.message || "Ошибка загрузки кабинета");
+    } catch (nextError) {
+      setError(nextError?.message || "Ошибка загрузки кабинета");
     } finally {
       setLoading(false);
     }
@@ -54,12 +63,17 @@ export default function AccountPage() {
   async function loadOrderDetails(orderId) {
     try {
       setOrderLoading(true);
+      setReviewMessage("");
       setSelectedOrderId(orderId);
       setSelectedOrder(null);
       const details = await OrdersAPI.myOrder(orderId);
       setSelectedOrder(details);
-    } catch (e) {
-      setError(e?.message || "Не удалось загрузить детали заказа");
+      setReviewDraft({
+        rating: details.review?.rating || 5,
+        comment: details.review?.comment || ""
+      });
+    } catch (nextError) {
+      setError(nextError?.message || "Не удалось загрузить детали заказа");
     } finally {
       setOrderLoading(false);
     }
@@ -69,38 +83,55 @@ export default function AccountPage() {
     setSelectedOrderId("");
     setSelectedOrder(null);
     setOrderLoading(false);
+    setReviewMessage("");
   }
 
   useEffect(() => {
     if (isAuthed) loadAll();
   }, [isAuthed]);
 
-  async function handleAddAddress(e) {
-    e.preventDefault();
+  async function handleAddAddress(event) {
+    event.preventDefault();
     try {
       await UsersAPI.createAddress(newAddress);
       setNewAddress({ label: "Дом", address: "", comment: "", is_default: false });
       await loadAll();
-    } catch (e) {
-      setError(e?.message || "Не удалось добавить адрес");
+    } catch (nextError) {
+      setError(nextError?.message || "Не удалось добавить адрес");
     }
   }
 
-  async function setDefaultAddress(addr) {
+  async function setDefaultAddress(address) {
     try {
-      await UsersAPI.updateAddress(addr.id, { is_default: true });
+      await UsersAPI.updateAddress(address.id, { is_default: true });
       await loadAll();
-    } catch (e) {
-      setError(e?.message || "Не удалось обновить адрес");
+    } catch (nextError) {
+      setError(nextError?.message || "Не удалось обновить адрес");
     }
   }
 
-  async function removeAddress(addr) {
+  async function removeAddress(address) {
     try {
-      await UsersAPI.deleteAddress(addr.id);
+      await UsersAPI.deleteAddress(address.id);
       await loadAll();
-    } catch (e) {
-      setError(e?.message || "Не удалось удалить адрес");
+    } catch (nextError) {
+      setError(nextError?.message || "Не удалось удалить адрес");
+    }
+  }
+
+  async function saveReview() {
+    if (!selectedOrderId) return;
+    try {
+      setReviewSaving(true);
+      setReviewMessage("");
+      const review = await OrdersAPI.saveReview(selectedOrderId, reviewDraft);
+      setSelectedOrder((prev) => (prev ? { ...prev, review } : prev));
+      setReviewDraft({ rating: review.rating, comment: review.comment || "" });
+      setReviewMessage("Отзыв сохранен.");
+    } catch (nextError) {
+      setReviewMessage(nextError?.message || "Не удалось сохранить отзыв");
+    } finally {
+      setReviewSaving(false);
     }
   }
 
@@ -113,8 +144,14 @@ export default function AccountPage() {
     return (
       <div className="rounded-2xl border bg-card p-6 shadow-sm">
         <h1 className="text-2xl font-semibold">Личный кабинет</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Для доступа к кабинету нужно войти.</p>
-        <Link to="/login" state={{ from: "/account" }} className="mt-4 inline-flex rounded-xl bg-primary px-4 py-2 text-sm text-primary-foreground">
+        <p className="mt-2 text-sm text-muted-foreground">
+          Для доступа к кабинету нужно войти.
+        </p>
+        <Link
+          to="/login"
+          state={{ from: "/account" }}
+          className="mt-4 inline-flex rounded-xl bg-primary px-4 py-2 text-sm text-primary-foreground"
+        >
           Войти
         </Link>
       </div>
@@ -128,7 +165,11 @@ export default function AccountPage() {
         <p className="mt-2 text-sm text-muted-foreground">
           Вы вошли как: <span className="font-semibold text-foreground">{user?.email}</span>
         </p>
-        {error ? <div className="mt-3 rounded-xl border bg-background p-3 text-sm text-primary">{error}</div> : null}
+        {error ? (
+          <div className="mt-3 rounded-xl border bg-background p-3 text-sm text-primary">
+            {error}
+          </div>
+        ) : null}
       </div>
 
       <div className="grid gap-3 md:grid-cols-3">
@@ -140,14 +181,26 @@ export default function AccountPage() {
             <div className="mt-1 text-xs text-muted-foreground">Пока нет заказов</div>
           ) : (
             <div className="mt-2 space-y-2">
-              {orders.slice(0, 6).map((o) => (
-                <div key={o.order_id} className="rounded-lg border p-2 text-xs">
-                  <div className="font-medium">{String(o.order_id).slice(0, 8)}...</div>
-                  <div className="text-muted-foreground">{o.status} • {formatRUB(o.total)}</div>
-                  <div className="text-muted-foreground">{formatDate(o.created_at)}</div>
+              {orders.slice(0, 6).map((order) => (
+                <div key={order.order_id} className="rounded-lg border p-2 text-xs">
+                  <div className="font-medium">{String(order.order_id).slice(0, 8)}...</div>
+                  <div className="text-muted-foreground">
+                    {order.status} • {formatRUB(order.total)}
+                  </div>
+                  <div className="text-muted-foreground">{formatDate(order.created_at)}</div>
+                  {order.scheduled_for ? (
+                    <div className="text-muted-foreground">
+                      Доставка: {formatDate(order.scheduled_for)}
+                    </div>
+                  ) : null}
+                  {order.promo_code ? (
+                    <div className="text-muted-foreground">
+                      Промокод: {order.promo_code}
+                    </div>
+                  ) : null}
                   <button
                     className="mt-2 rounded border px-2 py-1"
-                    onClick={() => loadOrderDetails(String(o.order_id))}
+                    onClick={() => loadOrderDetails(String(order.order_id))}
                   >
                     Подробнее
                   </button>
@@ -155,7 +208,6 @@ export default function AccountPage() {
               ))}
             </div>
           )}
-
         </div>
 
         <div className="rounded-xl border bg-background p-4 md:col-span-1">
@@ -168,19 +220,33 @@ export default function AccountPage() {
                 {addresses.length === 0 ? (
                   <div className="text-xs text-muted-foreground">Нет сохраненных адресов</div>
                 ) : (
-                  addresses.map((a) => (
-                    <div key={a.id} className="rounded-lg border p-2 text-xs">
+                  addresses.map((address) => (
+                    <div key={address.id} className="rounded-lg border p-2 text-xs">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-medium">{a.label}</span>
-                        {a.is_default ? <span className="rounded bg-accent px-2 py-0.5">Основной</span> : null}
-                      </div>
-                      <div className="mt-1 text-muted-foreground">{a.address}</div>
-                      {a.comment ? <div className="text-muted-foreground">{a.comment}</div> : null}
-                      <div className="mt-2 flex gap-2">
-                        {!a.is_default ? (
-                          <button className="rounded border px-2 py-1" onClick={() => setDefaultAddress(a)}>Сделать основным</button>
+                        <span className="font-medium">{address.label}</span>
+                        {address.is_default ? (
+                          <span className="rounded bg-accent px-2 py-0.5">Основной</span>
                         ) : null}
-                        <button className="rounded border px-2 py-1" onClick={() => removeAddress(a)}>Удалить</button>
+                      </div>
+                      <div className="mt-1 text-muted-foreground">{address.address}</div>
+                      {address.comment ? (
+                        <div className="text-muted-foreground">{address.comment}</div>
+                      ) : null}
+                      <div className="mt-2 flex gap-2">
+                        {!address.is_default ? (
+                          <button
+                            className="rounded border px-2 py-1"
+                            onClick={() => setDefaultAddress(address)}
+                          >
+                            Сделать основным
+                          </button>
+                        ) : null}
+                        <button
+                          className="rounded border px-2 py-1"
+                          onClick={() => removeAddress(address)}
+                        >
+                          Удалить
+                        </button>
                       </div>
                     </div>
                   ))
@@ -188,14 +254,46 @@ export default function AccountPage() {
               </div>
 
               <form onSubmit={handleAddAddress} className="mt-3 space-y-2">
-                <input className="w-full rounded border px-2 py-1 text-xs" placeholder="Метка (Дом/Офис)" value={newAddress.label} onChange={(e) => setNewAddress((p) => ({ ...p, label: e.target.value }))} />
-                <input className="w-full rounded border px-2 py-1 text-xs" placeholder="Адрес" value={newAddress.address} onChange={(e) => setNewAddress((p) => ({ ...p, address: e.target.value }))} />
-                <input className="w-full rounded border px-2 py-1 text-xs" placeholder="Комментарий" value={newAddress.comment} onChange={(e) => setNewAddress((p) => ({ ...p, comment: e.target.value }))} />
+                <input
+                  className="w-full rounded border px-2 py-1 text-xs"
+                  placeholder="Метка (Дом/Офис)"
+                  value={newAddress.label}
+                  onChange={(event) =>
+                    setNewAddress((prev) => ({ ...prev, label: event.target.value }))
+                  }
+                />
+                <input
+                  className="w-full rounded border px-2 py-1 text-xs"
+                  placeholder="Адрес"
+                  value={newAddress.address}
+                  onChange={(event) =>
+                    setNewAddress((prev) => ({ ...prev, address: event.target.value }))
+                  }
+                />
+                <input
+                  className="w-full rounded border px-2 py-1 text-xs"
+                  placeholder="Комментарий"
+                  value={newAddress.comment}
+                  onChange={(event) =>
+                    setNewAddress((prev) => ({ ...prev, comment: event.target.value }))
+                  }
+                />
                 <label className="flex items-center gap-2 text-xs">
-                  <input type="checkbox" checked={newAddress.is_default} onChange={(e) => setNewAddress((p) => ({ ...p, is_default: e.target.checked }))} />
+                  <input
+                    type="checkbox"
+                    checked={newAddress.is_default}
+                    onChange={(event) =>
+                      setNewAddress((prev) => ({
+                        ...prev,
+                        is_default: event.target.checked
+                      }))
+                    }
+                  />
                   Сделать адресом по умолчанию
                 </label>
-                <button className="w-full rounded bg-primary px-3 py-2 text-xs text-primary-foreground">Добавить адрес</button>
+                <button className="w-full rounded bg-primary px-3 py-2 text-xs text-primary-foreground">
+                  Добавить адрес
+                </button>
               </form>
             </>
           )}
@@ -207,19 +305,45 @@ export default function AccountPage() {
             <div className="mt-1 text-xs text-muted-foreground">Загрузка...</div>
           ) : (
             <div className="mt-2 space-y-1 text-xs">
-              <div className="flex justify-between"><span>Баланс</span><span className="font-semibold">{bonuses.balance}</span></div>
-              <div className="flex justify-between"><span>Начислено</span><span>{bonuses.accrued}</span></div>
-              <div className="flex justify-between"><span>Списано</span><span>{bonuses.spent}</span></div>
-              <div className="pt-1 text-muted-foreground">Начисление: 5% от завершенных заказов.</div>
+              <div className="flex justify-between">
+                <span>Баланс</span>
+                <span className="font-semibold">{bonuses.balance}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Начислено</span>
+                <span>{bonuses.accrued}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Списано</span>
+                <span>{bonuses.spent}</span>
+              </div>
+              <div className="pt-1 text-muted-foreground">
+                Начисление: 5% от завершенных заказов.
+              </div>
             </div>
           )}
         </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Link to="/menu" className="rounded-xl bg-primary px-4 py-2 text-sm text-primary-foreground hover:opacity-90">Перейти в меню</Link>
-        <button onClick={loadAll} className="rounded-xl border bg-background px-4 py-2 text-sm hover:bg-accent hover:text-accent-foreground">Обновить</button>
-        <button onClick={handleLogout} className="rounded-xl border bg-background px-4 py-2 text-sm hover:bg-accent hover:text-accent-foreground">Выйти</button>
+        <Link
+          to="/menu"
+          className="rounded-xl bg-primary px-4 py-2 text-sm text-primary-foreground hover:opacity-90"
+        >
+          Перейти в меню
+        </Link>
+        <button
+          onClick={loadAll}
+          className="rounded-xl border bg-background px-4 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
+        >
+          Обновить
+        </button>
+        <button
+          onClick={handleLogout}
+          className="rounded-xl border bg-background px-4 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
+        >
+          Выйти
+        </button>
       </div>
 
       {(selectedOrderId || orderLoading) && (
@@ -238,34 +362,143 @@ export default function AccountPage() {
             </div>
 
             {orderLoading ? (
-              <div className="mt-4 text-sm text-muted-foreground">Загрузка деталей заказа...</div>
+              <div className="mt-4 text-sm text-muted-foreground">
+                Загрузка деталей заказа...
+              </div>
             ) : selectedOrder ? (
               <div className="mt-4 text-sm">
-                <div className="font-semibold">Заказ {String(selectedOrder.order_id).slice(0, 8)}...</div>
-                <div className="mt-1 text-muted-foreground">Статус: {selectedOrder.status}</div>
-                <div className="mt-1 text-muted-foreground">Создан: {formatDate(selectedOrder.created_at)}</div>
+                <div className="font-semibold">
+                  Заказ {String(selectedOrder.order_id).slice(0, 8)}...
+                </div>
+                <div className="mt-1 text-muted-foreground">
+                  Статус: {selectedOrder.status}
+                </div>
+                <div className="mt-1 text-muted-foreground">
+                  Создан: {formatDate(selectedOrder.created_at)}
+                </div>
+                {selectedOrder.scheduled_for ? (
+                  <div className="mt-1 text-muted-foreground">
+                    Запланированная доставка: {formatDate(selectedOrder.scheduled_for)}
+                  </div>
+                ) : null}
 
                 <div className="mt-3 space-y-2">
-                  {selectedOrder.items.map((it, idx) => (
-                    <div key={`${it.pizza_id}-${idx}`} className="rounded-lg border p-3">
-                      <div className="font-medium">{it.title}</div>
+                  {selectedOrder.items.map((item, index) => (
+                    <div key={`${item.pizza_id}-${index}`} className="rounded-lg border p-3">
+                      <div className="font-medium">{item.title}</div>
                       <div className="text-muted-foreground">
-                        size: {it.size_id} • qty: {it.qty}
+                        size: {item.size_id} • qty: {item.qty}
                       </div>
-                      {it.toppings?.length ? (
-                        <div className="text-muted-foreground">Добавки: {it.toppings.join(", ")}</div>
+                      {item.toppings?.length ? (
+                        <div className="text-muted-foreground">
+                          Добавки: {item.toppings.join(", ")}
+                        </div>
                       ) : null}
-                      <div className="text-muted-foreground">{formatRUB(it.unit_price * it.qty)}</div>
+                      <div className="text-muted-foreground">
+                        {formatRUB(item.unit_price * item.qty)}
+                      </div>
                     </div>
                   ))}
                 </div>
 
                 <div className="mt-3 border-t pt-3 text-muted-foreground">
-                  <div>Подытог: {formatRUB(selectedOrder.subtotal)}</div>
-                  <div>Скидка: {selectedOrder.discount ? `- ${formatRUB(selectedOrder.discount)}` : "нет"}</div>
-                  <div>Доставка: {selectedOrder.delivery_price === 0 ? "Бесплатно" : formatRUB(selectedOrder.delivery_price)}</div>
-                  <div>Бонусы: {selectedOrder.bonus_spent ? `- ${formatRUB(selectedOrder.bonus_spent)}` : "нет"}</div>
-                  <div className="font-semibold text-foreground">Итого: {formatRUB(selectedOrder.total)}</div>
+                  <div>
+                    Подытог: {formatRUB(selectedOrder.subtotal_before_discount)}
+                  </div>
+                  <div>
+                    Комбо-скидка:{" "}
+                    {selectedOrder.combo_discount
+                      ? `- ${formatRUB(selectedOrder.combo_discount)}`
+                      : "нет"}
+                  </div>
+                  <div>
+                    Промокод:{" "}
+                    {selectedOrder.promo_code
+                      ? `${selectedOrder.promo_code} (- ${formatRUB(selectedOrder.promo_discount)})`
+                      : "нет"}
+                  </div>
+                  <div>
+                    Доставка:{" "}
+                    {selectedOrder.delivery_price === 0
+                      ? "Бесплатно"
+                      : formatRUB(selectedOrder.delivery_price)}
+                  </div>
+                  <div>
+                    Бонусы:{" "}
+                    {selectedOrder.bonus_spent
+                      ? `- ${formatRUB(selectedOrder.bonus_spent)}`
+                      : "нет"}
+                  </div>
+                  <div className="font-semibold text-foreground">
+                    Итого: {formatRUB(selectedOrder.total)}
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-xl border bg-background p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-semibold">Отзыв по заказу</div>
+                    {selectedOrder.review ? (
+                      <div className="text-xs text-muted-foreground">
+                        Сохранен: {formatDate(selectedOrder.review.created_at)}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {selectedOrder.status !== "done" ? (
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      Оставить отзыв можно после перевода заказа в статус `done`.
+                    </div>
+                  ) : (
+                    <div className="mt-3 space-y-3">
+                      <div className="flex flex-wrap gap-2">
+                        {[1, 2, 3, 4, 5].map((rating) => (
+                          <button
+                            key={rating}
+                            type="button"
+                            onClick={() =>
+                              setReviewDraft((prev) => ({ ...prev, rating }))
+                            }
+                            className={[
+                              "rounded-lg border px-3 py-1.5 text-sm",
+                              reviewDraft.rating === rating
+                                ? "bg-accent text-accent-foreground"
+                                : "bg-card hover:bg-accent"
+                            ].join(" ")}
+                          >
+                            {rating} / 5
+                          </button>
+                        ))}
+                      </div>
+
+                      <textarea
+                        value={reviewDraft.comment}
+                        onChange={(event) =>
+                          setReviewDraft((prev) => ({
+                            ...prev,
+                            comment: event.target.value
+                          }))
+                        }
+                        rows={4}
+                        className="w-full rounded-xl border bg-card px-3 py-2"
+                        placeholder="Что понравилось, что можно улучшить?"
+                      />
+
+                      {reviewMessage ? (
+                        <div className="rounded-lg border bg-card p-2 text-xs text-primary">
+                          {reviewMessage}
+                        </div>
+                      ) : null}
+
+                      <button
+                        type="button"
+                        disabled={reviewSaving}
+                        onClick={saveReview}
+                        className="rounded-xl bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-50"
+                      >
+                        {reviewSaving ? "Сохраняю..." : "Сохранить отзыв"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (

@@ -1,4 +1,4 @@
-﻿import uuid
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import desc, select
@@ -7,19 +7,48 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db, require_admin
 from app.models.catalog import Pizza, Size, Topping
-from app.models.order import Order
+from app.models.order import Order, Review
+from app.models.promo import PromoCode
 from app.models.user import User
 from app.schemas.catalog import PizzaIn, PizzaOut, SizeIn, SizeOut, ToppingIn, ToppingOut
-from app.schemas.order import OrderListItemOut, OrderStatusIn
+from app.schemas.order import AdminReviewOut, OrderListItemOut, OrderStatusIn
+from app.schemas.promo import PromoCodeIn, PromoCodeOut
+from app.services.order_flow import normalize_promo_code
 
 router = APIRouter(tags=["admin"])
 
 
-def parse_order_uuid(order_id: str) -> uuid.UUID:
+def parse_uuid(value: str, detail: str = "Invalid id format") -> uuid.UUID:
     try:
-        return uuid.UUID(order_id)
+        return uuid.UUID(value)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Invalid order_id format") from exc
+        raise HTTPException(status_code=400, detail=detail) from exc
+
+
+def serialize_pizza(pizza: Pizza) -> PizzaOut:
+    return PizzaOut(
+        id=pizza.id,
+        name=pizza.name,
+        description=pizza.description,
+        base_price=pizza.base_price,
+        category=pizza.category,
+        image=pizza.image,
+        available=pizza.available,
+    )
+
+
+def serialize_promo(promo: PromoCode) -> PromoCodeOut:
+    return PromoCodeOut(
+        id=promo.id,
+        code=promo.code,
+        title=promo.title,
+        description=promo.description,
+        discount_type=promo.discount_type,
+        discount_value=promo.discount_value,
+        min_order_total=promo.min_order_total,
+        active=promo.active,
+        created_at=promo.created_at.isoformat(),
+    )
 
 
 @router.get("/admin/pizzas", response_model=list[PizzaOut])
@@ -29,18 +58,7 @@ async def admin_list_pizzas(
 ) -> list[PizzaOut]:
     _ = admin
     pizzas = (await db.execute(select(Pizza).order_by(Pizza.name.asc()))).scalars().all()
-    return [
-        PizzaOut(
-            id=p.id,
-            name=p.name,
-            description=p.description,
-            base_price=p.base_price,
-            category=p.category,
-            image=p.image,
-            available=p.available,
-        )
-        for p in pizzas
-    ]
+    return [serialize_pizza(pizza) for pizza in pizzas]
 
 
 @router.post("/admin/pizzas", response_model=PizzaOut)
@@ -57,15 +75,7 @@ async def admin_create_pizza(
     db.add(pizza)
     await db.commit()
     await db.refresh(pizza)
-    return PizzaOut(
-        id=pizza.id,
-        name=pizza.name,
-        description=pizza.description,
-        base_price=pizza.base_price,
-        category=pizza.category,
-        image=pizza.image,
-        available=pizza.available,
-    )
+    return serialize_pizza(pizza)
 
 
 @router.patch("/admin/pizzas/{pizza_id}", response_model=PizzaOut)
@@ -83,15 +93,7 @@ async def admin_update_pizza(
         setattr(pizza, key, value)
     await db.commit()
     await db.refresh(pizza)
-    return PizzaOut(
-        id=pizza.id,
-        name=pizza.name,
-        description=pizza.description,
-        base_price=pizza.base_price,
-        category=pizza.category,
-        image=pizza.image,
-        available=pizza.available,
-    )
+    return serialize_pizza(pizza)
 
 
 @router.delete("/admin/pizzas/{pizza_id}", response_model=dict)
@@ -226,13 +228,16 @@ async def admin_list_orders(
     orders = res.scalars().all()
     return [
         OrderListItemOut(
-            order_id=o.id,
-            status=o.status,
-            total=o.total,
-            created_at=o.created_at.isoformat(),
-            items_count=len(o.items),
+            order_id=order.id,
+            status=order.status,
+            total=order.total,
+            created_at=order.created_at.isoformat(),
+            items_count=len(order.items),
+            scheduled_for=order.scheduled_for.isoformat() if order.scheduled_for else None,
+            promo_code=order.promo_code,
+            promo_discount=order.promo_discount,
         )
-        for o in orders
+        for order in orders
     ]
 
 
@@ -244,7 +249,7 @@ async def admin_update_order_status(
     admin: User = Depends(require_admin),
 ) -> dict:
     _ = admin
-    order_uuid = parse_order_uuid(order_id)
+    order_uuid = parse_uuid(order_id, "Invalid order_id format")
     order = (await db.execute(select(Order).where(Order.id == order_uuid))).scalar_one_or_none()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -253,3 +258,116 @@ async def admin_update_order_status(
     await db.commit()
     await db.refresh(order)
     return {"order_id": str(order.id), "status": order.status}
+
+
+@router.get("/admin/promocodes", response_model=list[PromoCodeOut])
+async def admin_list_promocodes(
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> list[PromoCodeOut]:
+    _ = admin
+    promos = (await db.execute(select(PromoCode).order_by(PromoCode.created_at.desc()))).scalars().all()
+    return [serialize_promo(promo) for promo in promos]
+
+
+@router.post("/admin/promocodes", response_model=PromoCodeOut)
+async def admin_create_promocode(
+    data: PromoCodeIn,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> PromoCodeOut:
+    _ = admin
+    code = normalize_promo_code(data.code)
+    exists = (await db.execute(select(PromoCode).where(PromoCode.code == code))).scalar_one_or_none()
+    if exists:
+        raise HTTPException(status_code=409, detail="Promo code already exists")
+
+    promo = PromoCode(
+        code=code,
+        title=data.title,
+        description=data.description,
+        discount_type=data.discount_type,
+        discount_value=data.discount_value,
+        min_order_total=data.min_order_total,
+        active=data.active,
+    )
+    db.add(promo)
+    await db.commit()
+    await db.refresh(promo)
+    return serialize_promo(promo)
+
+
+@router.patch("/admin/promocodes/{promo_id}", response_model=PromoCodeOut)
+async def admin_update_promocode(
+    promo_id: str,
+    data: PromoCodeIn,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> PromoCodeOut:
+    _ = admin
+    promo_uuid = parse_uuid(promo_id)
+    promo = (await db.execute(select(PromoCode).where(PromoCode.id == promo_uuid))).scalar_one_or_none()
+    if not promo:
+        raise HTTPException(status_code=404, detail="Promo code not found")
+
+    code = normalize_promo_code(data.code)
+    exists = (
+        await db.execute(select(PromoCode).where(PromoCode.code == code, PromoCode.id != promo_uuid))
+    ).scalar_one_or_none()
+    if exists:
+        raise HTTPException(status_code=409, detail="Promo code already exists")
+
+    promo.code = code
+    promo.title = data.title
+    promo.description = data.description
+    promo.discount_type = data.discount_type
+    promo.discount_value = data.discount_value
+    promo.min_order_total = data.min_order_total
+    promo.active = data.active
+    await db.commit()
+    await db.refresh(promo)
+    return serialize_promo(promo)
+
+
+@router.delete("/admin/promocodes/{promo_id}", response_model=dict)
+async def admin_delete_promocode(
+    promo_id: str,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> dict:
+    _ = admin
+    promo_uuid = parse_uuid(promo_id)
+    promo = (await db.execute(select(PromoCode).where(PromoCode.id == promo_uuid))).scalar_one_or_none()
+    if not promo:
+        raise HTTPException(status_code=404, detail="Promo code not found")
+    promo.active = False
+    await db.commit()
+    return {"id": str(promo.id), "active": promo.active}
+
+
+@router.get("/admin/reviews", response_model=list[AdminReviewOut])
+async def admin_list_reviews(
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> list[AdminReviewOut]:
+    _ = admin
+    rows = (
+        await db.execute(
+            select(Review, User)
+            .join(User, User.id == Review.user_id)
+            .order_by(desc(Review.created_at))
+        )
+    ).all()
+    return [
+        AdminReviewOut(
+            id=review.id,
+            order_id=review.order_id,
+            user_id=review.user_id,
+            user_name=user.name,
+            user_email=user.email,
+            rating=review.rating,
+            comment=review.comment,
+            created_at=review.created_at.isoformat(),
+        )
+        for review, user in rows
+    ]

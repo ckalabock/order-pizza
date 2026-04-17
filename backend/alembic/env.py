@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.core.config import settings
 from app.core.database import Base
-from app.models import catalog, order, user  # noqa: F401
+from app.models import catalog, order, promo, user  # noqa: F401
 
 config = context.config
 fileConfig(config.config_file_name)

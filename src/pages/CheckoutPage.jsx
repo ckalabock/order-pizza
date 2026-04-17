@@ -1,11 +1,34 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import EmptyState from "../components/EmptyState.jsx";
+import { OrdersAPI } from "../api/orders.js";
+import { PromosAPI } from "../api/promos.js";
+import { UsersAPI } from "../api/users.js";
 import { useAuth } from "../context/authContext.jsx";
 import { useCart } from "../context/cartContext.jsx";
-import { OrdersAPI } from "../api/orders.js";
-import { UsersAPI } from "../api/users.js";
 import { formatRUB } from "../utils/currency.js";
+
+function toServerDateTime(localValue) {
+  if (!localValue) return null;
+  const date = new Date(localValue);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function toLocalInputValue(date) {
+  const normalized = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return normalized.toISOString().slice(0, 16);
+}
+
+function getScheduleMinValue() {
+  return toLocalInputValue(new Date(Date.now() + 30 * 60 * 1000));
+}
+
+function formatPromo(promo) {
+  if (promo.discount_type === "percent") {
+    return `${promo.code} • ${promo.discount_value}%`;
+  }
+  return `${promo.code} • ${formatRUB(promo.discount_value)}`;
+}
 
 export default function CheckoutPage() {
   const { state, clear, constants } = useCart();
@@ -17,21 +40,43 @@ export default function CheckoutPage() {
     phone: "",
     address: "",
     comment: "",
-    payment: "card"
+    payment: "card",
+    promoCode: "",
+    scheduleMode: "asap",
+    scheduledFor: ""
   });
 
   const [savedAddresses, setSavedAddresses] = useState([]);
+  const [activePromos, setActivePromos] = useState([]);
   const [bonuses, setBonuses] = useState({ balance: 0, accrued: 0, spent: 0 });
   const [bonusInput, setBonusInput] = useState("0");
   const [selectedAddressId, setSelectedAddressId] = useState("");
+  const [pricing, setPricing] = useState(null);
+  const [pricingError, setPricingError] = useState("");
+  const [pricingLoading, setPricingLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
   useEffect(() => {
     if (user?.name) {
-      setForm((p) => ({ ...p, name: p.name || user.name }));
+      setForm((prev) => ({ ...prev, name: prev.name || user.name }));
     }
   }, [user?.name]);
+
+  useEffect(() => {
+    let mounted = true;
+    PromosAPI.listActive()
+      .then((list) => {
+        if (mounted) setActivePromos(list);
+      })
+      .catch(() => {
+        if (mounted) setActivePromos([]);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!isAuthed) {
@@ -48,13 +93,13 @@ export default function CheckoutPage() {
         if (!mounted) return;
         setSavedAddresses(list);
         setBonuses(bonusStats);
-        const def = list.find((a) => a.is_default) || list[0];
-        if (def) {
-          setSelectedAddressId(String(def.id));
-          setForm((p) => ({
-            ...p,
-            address: p.address || def.address,
-            comment: p.comment || def.comment || ""
+        const defaultAddress = list.find((item) => item.is_default) || list[0];
+        if (defaultAddress) {
+          setSelectedAddressId(String(defaultAddress.id));
+          setForm((prev) => ({
+            ...prev,
+            address: prev.address || defaultAddress.address,
+            comment: prev.comment || defaultAddress.comment || ""
           }));
         }
         setBonusInput("0");
@@ -70,18 +115,31 @@ export default function CheckoutPage() {
     };
   }, [isAuthed]);
 
-  const canSubmit = useMemo(() => {
-    if (state.items.length === 0) return false;
-    if (form.name.trim().length < 2) return false;
-    if (form.phone.trim().length < 6) return false;
-    if (form.address.trim().length < 6) return false;
-    return true;
-  }, [form, state.items.length]);
+  const fallbackSummary = useMemo(() => {
+    const promoCode = form.promoCode.trim().toUpperCase() || null;
+    return {
+      subtotal_before_discount: Math.round(state.subtotalBeforeDiscount),
+      combo_discount: Math.round(state.discount),
+      subtotal: Math.round(state.subtotal),
+      discount: Math.round(state.discount),
+      promo_code: promoCode,
+      promo_discount: 0,
+      delivery_price: Math.round(state.delivery),
+      bonus_spent: 0,
+      total_before_bonuses: Math.round(state.total),
+      total: Math.round(state.total),
+      scheduled_for:
+        form.scheduleMode === "scheduled" ? toServerDateTime(form.scheduledFor) : null
+    };
+  }, [form.promoCode, form.scheduleMode, form.scheduledFor, state]);
 
   const maxBonusSpend = useMemo(() => {
     if (!isAuthed) return 0;
-    return Math.max(0, Math.min(bonuses.balance || 0, state.total || 0));
-  }, [bonuses.balance, isAuthed, state.total]);
+    return Math.max(
+      0,
+      Math.min(bonuses.balance || 0, pricing?.total_before_bonuses ?? fallbackSummary.total_before_bonuses)
+    );
+  }, [bonuses.balance, fallbackSummary.total_before_bonuses, isAuthed, pricing?.total_before_bonuses]);
 
   const bonusSpent = useMemo(() => {
     const parsed = Number.parseInt(bonusInput, 10);
@@ -89,14 +147,94 @@ export default function CheckoutPage() {
     return Math.min(parsed, maxBonusSpend);
   }, [bonusInput, maxBonusSpend]);
 
-  const finalTotal = useMemo(() => Math.max(0, state.total - bonusSpent), [bonusSpent, state.total]);
+  const previewPayload = useMemo(
+    () => ({
+      bonus_spent: bonusSpent,
+      promo_code: form.promoCode.trim() || null,
+      scheduled_for:
+        form.scheduleMode === "scheduled" ? toServerDateTime(form.scheduledFor) : null,
+      items: state.items.map((item) => ({
+        pizza_id: item.pizzaId,
+        size_id: item.meta?.sizeId || "m",
+        toppings: item.meta?.toppingIds || [],
+        qty: item.qty
+      }))
+    }),
+    [bonusSpent, form.promoCode, form.scheduleMode, form.scheduledFor, state.items]
+  );
+
+  const canPreview = useMemo(() => {
+    if (state.items.length === 0) return false;
+    const promoCode = form.promoCode.trim();
+    if (promoCode && promoCode.length < 3) return false;
+    if (form.scheduleMode === "scheduled" && !form.scheduledFor) return false;
+    return true;
+  }, [form.promoCode, form.scheduleMode, form.scheduledFor, state.items.length]);
+
+  useEffect(() => {
+    if (!canPreview) {
+      setPricing(null);
+      setPricingError("");
+      setPricingLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const timerId = window.setTimeout(async () => {
+      setPricingLoading(true);
+      try {
+        const nextPricing = await OrdersAPI.previewOrder(previewPayload, { auth: isAuthed });
+        if (cancelled) return;
+        setPricing(nextPricing);
+        setPricingError("");
+      } catch (error) {
+        if (cancelled) return;
+        setPricing(null);
+        setPricingError(error?.message || "Не удалось рассчитать стоимость заказа");
+      } finally {
+        if (!cancelled) setPricingLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timerId);
+    };
+  }, [canPreview, isAuthed, previewPayload]);
+
+  const summary = pricing
+    ? pricing
+    : {
+        ...fallbackSummary,
+        bonus_spent: bonusSpent,
+        total: Math.max(0, fallbackSummary.total_before_bonuses - bonusSpent)
+      };
+
+  const canSubmit = useMemo(() => {
+    if (state.items.length === 0) return false;
+    if (form.name.trim().length < 2) return false;
+    if (form.phone.trim().length < 6) return false;
+    if (form.address.trim().length < 6) return false;
+    if (form.scheduleMode === "scheduled" && !form.scheduledFor) return false;
+    if (pricingError && (form.promoCode.trim() || form.scheduleMode === "scheduled")) return false;
+    return true;
+  }, [
+    form.address,
+    form.name,
+    form.phone,
+    form.promoCode,
+    form.scheduleMode,
+    form.scheduledFor,
+    pricingError,
+    state.items.length
+  ]);
 
   function update(key, value) {
-    setForm((p) => ({ ...p, [key]: value }));
+    setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  async function submit(e) {
-    e.preventDefault();
+  async function submit(event) {
+    event.preventDefault();
     if (!canSubmit) return;
 
     setErr("");
@@ -108,21 +246,22 @@ export default function CheckoutPage() {
         delivery: { address: form.address.trim(), comment: form.comment.trim() || null },
         payment_method: form.payment,
         bonus_spent: bonusSpent,
-        items: state.items.map((it) => ({
-          pizza_id: it.pizzaId,
-          size_id: it.meta?.sizeId || "m",
-          toppings: it.meta?.toppingIds || [],
-          qty: it.qty
-        }))
+        promo_code: form.promoCode.trim() || null,
+        scheduled_for:
+          form.scheduleMode === "scheduled" ? toServerDateTime(form.scheduledFor) : null,
+        items: previewPayload.items
       };
 
-      const res = await OrdersAPI.createOrder(payload, { auth: true });
+      const response = await OrdersAPI.createOrder(payload, { auth: true });
       clear();
-      nav(`/success?order=${encodeURIComponent(res.order_id)}&token=${encodeURIComponent(res.public_token)}`, {
-        replace: true
-      });
-    } catch (e2) {
-      setErr(e2?.message || "Ошибка создания заказа");
+      nav(
+        `/success?order=${encodeURIComponent(response.order_id)}&token=${encodeURIComponent(response.public_token)}`,
+        {
+          replace: true
+        }
+      );
+    } catch (error) {
+      setErr(error?.message || "Ошибка создания заказа");
     } finally {
       setLoading(false);
     }
@@ -138,12 +277,15 @@ export default function CheckoutPage() {
         <div className="rounded-2xl border bg-card p-5 shadow-sm">
           <h1 className="text-2xl font-semibold">Оформление заказа</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {isAuthed
-              ? "Данные профиля и адреса подставляются автоматически."
-              : "Можно оформить заказ как гость без регистрации."}
+            На третьем этапе доступны промокоды, предварительный серверный расчет и
+            отложенная доставка.
           </p>
 
-          {err ? <div className="mt-3 rounded-xl border bg-background p-3 text-sm text-primary">{err}</div> : null}
+          {err ? (
+            <div className="mt-3 rounded-xl border bg-background p-3 text-sm text-primary">
+              {err}
+            </div>
+          ) : null}
 
           <form onSubmit={submit} className="mt-4 space-y-4">
             {isAuthed && savedAddresses.length > 0 ? (
@@ -151,18 +293,24 @@ export default function CheckoutPage() {
                 <label>Сохраненный адрес</label>
                 <select
                   value={selectedAddressId}
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    setSelectedAddressId(id);
-                    const addr = savedAddresses.find((a) => String(a.id) === id);
-                    if (addr) {
-                      setForm((p) => ({ ...p, address: addr.address, comment: addr.comment || p.comment }));
+                  onChange={(event) => {
+                    const nextId = event.target.value;
+                    setSelectedAddressId(nextId);
+                    const address = savedAddresses.find((item) => String(item.id) === nextId);
+                    if (address) {
+                      setForm((prev) => ({
+                        ...prev,
+                        address: address.address,
+                        comment: address.comment || prev.comment
+                      }));
                     }
                   }}
                   className="w-full rounded-xl border bg-input-background px-3 py-2"
                 >
-                  {savedAddresses.map((a) => (
-                    <option key={a.id} value={a.id}>{a.label}: {a.address}</option>
+                  {savedAddresses.map((address) => (
+                    <option key={address.id} value={address.id}>
+                      {address.label}: {address.address}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -173,7 +321,7 @@ export default function CheckoutPage() {
                 <label>Имя</label>
                 <input
                   value={form.name}
-                  onChange={(e) => update("name", e.target.value)}
+                  onChange={(event) => update("name", event.target.value)}
                   className="w-full rounded-xl border bg-input-background px-3 py-2"
                   placeholder="Например: Артур"
                 />
@@ -182,7 +330,7 @@ export default function CheckoutPage() {
                 <label>Телефон</label>
                 <input
                   value={form.phone}
-                  onChange={(e) => update("phone", e.target.value)}
+                  onChange={(event) => update("phone", event.target.value)}
                   className="w-full rounded-xl border bg-input-background px-3 py-2"
                   placeholder="+7 ..."
                 />
@@ -193,7 +341,7 @@ export default function CheckoutPage() {
               <label>Адрес</label>
               <input
                 value={form.address}
-                onChange={(e) => update("address", e.target.value)}
+                onChange={(event) => update("address", event.target.value)}
                 className="w-full rounded-xl border bg-input-background px-3 py-2"
                 placeholder="Улица, дом, квартира"
               />
@@ -203,10 +351,75 @@ export default function CheckoutPage() {
               <label>Комментарий</label>
               <input
                 value={form.comment}
-                onChange={(e) => update("comment", e.target.value)}
+                onChange={(event) => update("comment", event.target.value)}
                 className="w-full rounded-xl border bg-input-background px-3 py-2"
                 placeholder="Например: домофон не работает"
               />
+            </div>
+
+            <div className="space-y-2 rounded-xl border bg-background p-3">
+              <div className="text-sm font-semibold">Промокод</div>
+              <input
+                value={form.promoCode}
+                onChange={(event) => update("promoCode", event.target.value.toUpperCase())}
+                className="w-full rounded-xl border bg-input-background px-3 py-2"
+                placeholder="Например: WELCOME10"
+              />
+              {activePromos.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {activePromos.map((promo) => (
+                    <button
+                      key={promo.id}
+                      type="button"
+                      onClick={() => update("promoCode", promo.code)}
+                      className="rounded-full border bg-card px-3 py-1 text-xs hover:bg-accent"
+                    >
+                      {formatPromo(promo)}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <div className="text-xs text-muted-foreground">
+                Код проверяется на backend по текущему составу корзины.
+              </div>
+            </div>
+
+            <div className="space-y-2 rounded-xl border bg-background p-3">
+              <div className="text-sm font-semibold">Время доставки</div>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { id: "asap", label: "Как можно скорее" },
+                  { id: "scheduled", label: "Запланировать" }
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => update("scheduleMode", item.id)}
+                    className={[
+                      "rounded-xl border px-3 py-2 text-sm hover:bg-accent",
+                      form.scheduleMode === item.id
+                        ? "bg-accent text-accent-foreground"
+                        : "bg-card"
+                    ].join(" ")}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              {form.scheduleMode === "scheduled" ? (
+                <input
+                  type="datetime-local"
+                  min={getScheduleMinValue()}
+                  value={form.scheduledFor}
+                  onChange={(event) => update("scheduledFor", event.target.value)}
+                  className="w-full rounded-xl border bg-input-background px-3 py-2"
+                />
+              ) : (
+                <div className="text-xs text-muted-foreground">
+                  Система оформит заказ на ближайшее доступное время.
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -215,17 +428,19 @@ export default function CheckoutPage() {
                 {[
                   { id: "card", label: "Картой" },
                   { id: "cash", label: "Наличными" }
-                ].map((p) => (
+                ].map((payment) => (
                   <button
-                    key={p.id}
+                    key={payment.id}
                     type="button"
-                    onClick={() => update("payment", p.id)}
+                    onClick={() => update("payment", payment.id)}
                     className={[
                       "rounded-xl border px-3 py-2 text-sm hover:bg-accent",
-                      form.payment === p.id ? "bg-accent text-accent-foreground" : "bg-background"
+                      form.payment === payment.id
+                        ? "bg-accent text-accent-foreground"
+                        : "bg-background"
                     ].join(" ")}
                   >
-                    {p.label}
+                    {payment.label}
                   </button>
                 ))}
               </div>
@@ -257,10 +472,16 @@ export default function CheckoutPage() {
                   max={String(maxBonusSpend)}
                   step="1"
                   value={bonusInput}
-                  onChange={(e) => setBonusInput(e.target.value)}
+                  onChange={(event) => setBonusInput(event.target.value)}
                   className="w-full rounded-xl border bg-input-background px-3 py-2"
                   placeholder="0"
                 />
+              </div>
+            ) : null}
+
+            {pricingError ? (
+              <div className="rounded-xl border bg-background p-3 text-sm text-primary">
+                {pricingError}
               </div>
             ) : null}
 
@@ -276,52 +497,72 @@ export default function CheckoutPage() {
       </div>
 
       <div className="rounded-2xl border bg-card p-5 shadow-sm">
-        <div className="text-base font-semibold">Сумма</div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-base font-semibold">Сумма</div>
+          {pricingLoading ? (
+            <div className="text-xs text-muted-foreground">Пересчитываю...</div>
+          ) : null}
+        </div>
 
         <div className="mt-3 space-y-2 text-sm">
-          {state.items.map((it) => (
-            <div key={it.key} className="flex items-start justify-between gap-3">
+          {state.items.map((item) => (
+            <div key={item.key} className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="truncate">{it.title}</div>
+                <div className="truncate">{item.title}</div>
                 <div className="text-xs text-muted-foreground">
-                  {it.size} • {it.qty} шт.
+                  {item.size} • {item.qty} шт.
                 </div>
               </div>
-              <div className="shrink-0">{formatRUB(it.unitPrice * it.qty)}</div>
+              <div className="shrink-0">{formatRUB(item.unitPrice * item.qty)}</div>
             </div>
           ))}
 
           <div className="space-y-1 border-t pt-2">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Подытог</span>
-              <span>{formatRUB(state.subtotalBeforeDiscount)}</span>
+              <span>{formatRUB(summary.subtotal_before_discount)}</span>
             </div>
 
-            {state.discount > 0 && (
+            {summary.combo_discount > 0 ? (
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Скидка</span>
-                <span className="text-primary">- {formatRUB(state.discount)}</span>
+                <span className="text-muted-foreground">Комбо-скидка</span>
+                <span className="text-primary">- {formatRUB(summary.combo_discount)}</span>
               </div>
-            )}
+            ) : null}
+
+            {summary.promo_discount > 0 ? (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">
+                  Промокод {summary.promo_code ? summary.promo_code : ""}
+                </span>
+                <span className="text-primary">- {formatRUB(summary.promo_discount)}</span>
+              </div>
+            ) : null}
 
             <div className="flex justify-between">
               <span className="text-muted-foreground">Доставка</span>
-              <span>{state.delivery === 0 ? "Бесплатно" : formatRUB(state.delivery)}</span>
+              <span>
+                {summary.delivery_price === 0
+                  ? "Бесплатно"
+                  : formatRUB(summary.delivery_price)}
+              </span>
             </div>
 
-            {bonusSpent > 0 && (
+            {bonusSpent > 0 ? (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Бонусы</span>
                 <span className="text-primary">- {formatRUB(bonusSpent)}</span>
               </div>
-            )}
+            ) : null}
 
             <div className="flex justify-between text-base font-semibold">
               <span>Итого</span>
-              <span>{formatRUB(finalTotal)}</span>
+              <span>{formatRUB(summary.total)}</span>
             </div>
 
-            <div className="text-xs text-muted-foreground">Бесплатная доставка от {formatRUB(constants.FREE_DELIVERY_FROM)}.</div>
+            <div className="text-xs text-muted-foreground">
+              Бесплатная доставка от {formatRUB(constants.FREE_DELIVERY_FROM)}.
+            </div>
           </div>
         </div>
       </div>

@@ -3,16 +3,22 @@ import { Link, useSearchParams } from "react-router-dom";
 import { OrdersAPI } from "../api/orders.js";
 import { formatRUB } from "../utils/currency.js";
 
+function formatDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("ru-RU");
+}
+
 export default function SuccessPage() {
-  const [sp] = useSearchParams();
-  const orderId = sp.get("order");
-  const token = sp.get("token");
+  const [searchParams] = useSearchParams();
+  const orderId = searchParams.get("order");
+  const token = searchParams.get("token");
 
   const [loading, setLoading] = useState(false);
   const [order, setOrder] = useState(null);
   const [err, setErr] = useState("");
 
-  const canLoad = useMemo(() => !!orderId && !!token, [orderId, token]);
+  const canLoad = useMemo(() => Boolean(orderId && token), [orderId, token]);
 
   async function loadOrder() {
     if (!canLoad) return;
@@ -78,25 +84,41 @@ export default function SuccessPage() {
             <div className="text-base font-semibold">{formatRUB(order.total)}</div>
           </div>
 
+          {order.scheduled_for ? (
+            <div className="mt-2 text-sm text-muted-foreground">
+              Запланированная доставка: {formatDate(order.scheduled_for)}
+            </div>
+          ) : null}
+
+          {order.promo_code ? (
+            <div className="mt-1 text-sm text-muted-foreground">
+              Промокод {order.promo_code} применен на сумму{" "}
+              {formatRUB(order.promo_discount)}.
+            </div>
+          ) : null}
+
           <div className="mt-4 space-y-3">
-            {order.items.map((it, idx) => (
-              <div key={`${it.pizza_id}-${idx}`} className="rounded-xl border bg-background p-3">
+            {order.items.map((item, index) => (
+              <div key={`${item.pizza_id}-${index}`} className="rounded-xl border bg-background p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="font-semibold">{it.title}</div>
+                    <div className="font-semibold">{item.title}</div>
                     <div className="text-sm text-muted-foreground">
-                      Размер: {it.size_id} • Кол-во: {it.qty}
-                      {it.toppings?.length ? ` • Добавки: ${it.toppings.join(", ")}` : ""}
+                      Размер: {item.size_id} • Кол-во: {item.qty}
+                      {item.toppings?.length
+                        ? ` • Добавки: ${item.toppings.join(", ")}`
+                        : ""}
                     </div>
                   </div>
-                  <div className="shrink-0">{formatRUB(it.unit_price * it.qty)}</div>
+                  <div className="shrink-0">{formatRUB(item.unit_price * item.qty)}</div>
                 </div>
               </div>
             ))}
           </div>
 
           <div className="mt-4 text-sm text-muted-foreground">
-            Доставка: {order.delivery_price === 0 ? "Бесплатно" : formatRUB(order.delivery_price)} •
+            Доставка:{" "}
+            {order.delivery_price === 0 ? "Бесплатно" : formatRUB(order.delivery_price)} •
             {" "}Скидка: {order.discount ? `- ${formatRUB(order.discount)}` : "нет"} •
             {" "}Бонусы: {order.bonus_spent ? `- ${formatRUB(order.bonus_spent)}` : "нет"}
           </div>
